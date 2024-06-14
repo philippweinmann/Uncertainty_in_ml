@@ -1,11 +1,15 @@
 # %%
 import torch
+import torchvision
 from torch import nn
 import torch.nn.functional as F
-import torchvision
-import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from torchvision import datasets
 import sys
 import optuna
+from PIL import Image
+from IPython.display import display
+import numpy as np
 
 # %%
 if torch.cuda.is_available():
@@ -17,19 +21,19 @@ else:
 
 print("selected device: ", device)
 # %%
+transform=torchvision.transforms.Compose([
+                               torchvision.transforms.ToTensor(),
+                               torchvision.transforms.Normalize(
+                                 (0.1307,), (0.3081,))])
 
-transform = transforms.Compose(
-    [transforms.ToTensor(),
-    transforms.Normalize((0.1307,), (0.3081,))])
 
-# Create datasets for training & validation, download if necessary
-training_set = torchvision.datasets.FashionMNIST('./data', train=True, transform=transform, download=True)
-validation_set = torchvision.datasets.FashionMNIST('./data', train=False, transform=transform, download=True)
+# Download and load the training data
+train_dataset = datasets.MNIST(root='mnist_data', train=True, download=True, transform=transform)
+train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
-# Create data loaders for our datasets; shuffle for training, not for validation
-train_dataloader = torch.utils.data.DataLoader(training_set, batch_size=4, shuffle=True)
-test_dataloader = torch.utils.data.DataLoader(validation_set, batch_size=4, shuffle=False)
-
+# Download and load the test data
+test_dataset = datasets.MNIST(root='mnist_data', train=False, download=True, transform=transform)
+test_dataloader = DataLoader(test_dataset, batch_size=1000, shuffle=False)
 # %%
 class Net(nn.Module):
     def __init__(self):
@@ -47,11 +51,11 @@ class Net(nn.Module):
         x = self.conv2(x)
         x = F.relu(x)
         x = F.max_pool2d(x, 2)
-        x = self.dropout1(x)
+        # x = self.dropout1(x)
         x = torch.flatten(x, 1)
         x = self.fc1(x)
         x = F.relu(x)
-        x = self.dropout2(x)
+        # x = self.dropout2(x)
         x = self.fc2(x)
         output = F.log_softmax(x, dim=1)
         return output
@@ -147,4 +151,38 @@ opt_model.to(device)
 train_loop(dataloader=train_dataloader, model=opt_model, learning_rate=best_learning_rate)
 opt_error = test_loop(dataloader=test_dataloader, model=opt_model)
 
+# %%
+exampl_image = test_dataset.data[0]
+exampl_image_np = exampl_image.numpy()
+img = Image.fromarray(exampl_image_np)
+display(img)
+print(test_dataset.targets[0])
+
+opt_model.eval()
+input_image = exampl_image.float().unsqueeze(0).unsqueeze(0).to(device)
+
+def make_pred_interpretable(input):
+    input = input.float().unsqueeze(0).unsqueeze(0).to(device)
+    prediction = opt_model(input)
+    prediction = prediction.detach().cpu().squeeze(0)
+    prediction_np = prediction.numpy()
+    return np.exp(prediction_np)
+
+interpretable_predictions = make_pred_interpretable(exampl_image)
+print(interpretable_predictions)
+# %%
+seven = Image.open("seven.png")
+seven.show()
+# %%
+# seven = Image.open("seven.png").convert('L')
+# seven.save('greyscale_seven.png')
+
+seven_grayscale = Image.open("greyscale_seven.png")
+seven_grayscale_np = np.asarray(seven_grayscale, dtype=np.float32) / 255
+print(seven_grayscale_np.shape)
+
+
+interpretable_nonsesense_pred = make_pred_interpretable(torch.tensor(seven_grayscale_np))
+print(interpretable_nonsesense_pred)
+print(interpretable_nonsesense_pred[7])
 # %%
