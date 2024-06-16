@@ -151,28 +151,7 @@ train_loop(dataloader=train_dataloader, model=opt_model, learning_rate=best_lear
 opt_error = test_loop(dataloader=test_dataloader, model=opt_model)
 
 # %%
-exampl_image = test_dataset.data[0]
-exampl_image_np = exampl_image.numpy()
-img = Image.fromarray(exampl_image_np)
-display(img)
-print(test_dataset.targets[0])
-
 opt_model.eval()
-input_image = exampl_image.float().unsqueeze(0).unsqueeze(0).to(device)
-
-def make_pred_interpretable(input):
-    input = input.float().unsqueeze(0).unsqueeze(0).to(device)
-    prediction = opt_model(input)
-    prediction = prediction.detach().cpu().squeeze(0)
-    prediction_np = prediction.numpy()
-    return np.exp(prediction_np)
-
-interpretable_predictions = make_pred_interpretable(exampl_image)
-print(interpretable_predictions)
-# %%
-seven = Image.open("seven.png")
-seven_scaled = seven.resize((600,600))
-display(seven_scaled)
 # %%
 def forward_np_img(img : np.array, model):
     torch_img = torch.tensor(img)
@@ -181,6 +160,15 @@ def forward_np_img(img : np.array, model):
     return output
 
 random_grayscale_image = np.random.rand(28,28)
+
+def display_image_or_direction(img):
+    g_img = Image.fromarray(img, 'L')
+    g_img = g_img.resize((600,600))
+    display(g_img)
+
+
+display_image_or_direction(random_grayscale_image)
+
 output = forward_np_img(random_grayscale_image, opt_model)
 
 print("raw output: ", output)
@@ -188,10 +176,14 @@ print("interpretable output: ", torch.exp(output) * 100)
 
 # %%
 scaling_factor = 10000
-random_direction = scaling_factor * np.random.rand(28,28)
-modified_image = random_direction * random_grayscale_image
+random_direction = np.random.rand(28,28)
+display_image_or_direction(random_direction)
+random_scaled_direction = scaling_factor * np.random.rand(28,28)
+modified_image = random_scaled_direction * random_grayscale_image
 scaled_output = forward_np_img(modified_image, opt_model)
 
 print("raw output: ", scaled_output)
 print("interpretable output: ", torch.exp(scaled_output) * 100)
+# with this input, the neural network has a nearly 100% confidence in its output.
+# Notice how the predicted number (where it predicts it at 100%) changed each time the code is rerun due to the random direction
 # %%
