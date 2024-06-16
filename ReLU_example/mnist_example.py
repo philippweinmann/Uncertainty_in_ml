@@ -33,7 +33,7 @@ train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
 # Download and load the test data
 test_dataset = datasets.MNIST(root='mnist_data', train=False, download=True, transform=transform)
-test_dataloader = DataLoader(test_dataset, batch_size=1000, shuffle=False)
+test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 # %%
 class Net(nn.Module):
     def __init__(self):
@@ -117,7 +117,6 @@ def test_loop(dataloader, model, loss_fn=nn.CrossEntropyLoss()):
     correct /= size
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
-    print("AAAA", test_loss)
     return test_loss
 # %%
 
@@ -172,17 +171,27 @@ interpretable_predictions = make_pred_interpretable(exampl_image)
 print(interpretable_predictions)
 # %%
 seven = Image.open("seven.png")
-seven.show()
+seven_scaled = seven.resize((600,600))
+display(seven_scaled)
 # %%
-# seven = Image.open("seven.png").convert('L')
-# seven.save('greyscale_seven.png')
+def forward_np_img(img : np.array, model):
+    torch_img = torch.tensor(img)
+    batch_img = torch_img.float().unsqueeze(0).unsqueeze(0).to(device)
+    output = model(batch_img)
+    return output
 
-seven_grayscale = Image.open("greyscale_seven.png")
-seven_grayscale_np = np.asarray(seven_grayscale, dtype=np.float32) / 255
-print(seven_grayscale_np.shape)
+random_grayscale_image = np.random.rand(28,28)
+output = forward_np_img(random_grayscale_image, opt_model)
 
+print("raw output: ", output)
+print("interpretable output: ", torch.exp(output) * 100)
 
-interpretable_nonsesense_pred = make_pred_interpretable(torch.tensor(seven_grayscale_np))
-print(interpretable_nonsesense_pred)
-print(interpretable_nonsesense_pred[7])
+# %%
+scaling_factor = 10000
+random_direction = scaling_factor * np.random.rand(28,28)
+modified_image = random_direction * random_grayscale_image
+scaled_output = forward_np_img(modified_image, opt_model)
+
+print("raw output: ", scaled_output)
+print("interpretable output: ", torch.exp(scaled_output) * 100)
 # %%
