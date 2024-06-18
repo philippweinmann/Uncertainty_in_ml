@@ -35,9 +35,9 @@ train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 test_dataset = datasets.MNIST(root='mnist_data', train=False, download=True, transform=transform)
 test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 # %%
-class Net(nn.Module):
+class NonBayesianReLUNet(nn.Module):
     def __init__(self):
-        super(Net, self).__init__()
+        super(NonBayesianReLUNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
         self.dropout1 = nn.Dropout(0.25)
@@ -122,7 +122,7 @@ def test_loop(dataloader, model, loss_fn=nn.CrossEntropyLoss()):
 
 def objective(trial):
     learning_rate_sug = 10 ** -trial.suggest_float('learning_rate_sug', 1, 5)
-    model = Net()
+    model = NonBayesianReLUNet()
     model.to(device)
     train_loop(dataloader=train_dataloader, model=model, learning_rate=learning_rate_sug)
     error = test_loop(dataloader=test_dataloader, model=model)
@@ -144,14 +144,12 @@ def find_best_parameters():
 # from best the optuna hyperparameter search:
 best_learning_rate = 10 ** -(1.911)
 
-opt_model = Net()
-opt_model.to(device)
+def train_model(model, learning_rate):
+    model.to(device)
 
-train_loop(dataloader=train_dataloader, model=opt_model, learning_rate=best_learning_rate)
-opt_error = test_loop(dataloader=test_dataloader, model=opt_model)
-
-# %%
-opt_model.eval()
+    train_loop(dataloader=train_dataloader, model=model, learning_rate=learning_rate)
+    error = test_loop(dataloader=test_dataloader, model=model)
+    return model, error
 # %%
 def forward_np_img(img : np.array, model):
     torch_img = torch.tensor(img)
@@ -159,31 +157,35 @@ def forward_np_img(img : np.array, model):
     output = model(batch_img)
     return output
 
-random_grayscale_image = np.random.rand(28,28)
+
 
 def display_image_or_direction(img):
     g_img = Image.fromarray(img, 'L')
-    g_img = g_img.resize((600,600))
+    g_img = g_img.resize((400,400))
     display(g_img)
 
-
-display_image_or_direction(random_grayscale_image)
-
-output = forward_np_img(random_grayscale_image, opt_model)
-
-print("raw output: ", output)
-print("interpretable output: ", torch.exp(output) * 100)
+# %%
+non_bayesian_reLU_model, bnr_error = train_model(model=NonBayesianReLUNet(), learning_rate=best_learning_rate)
 
 # %%
-scaling_factor = 10000
+def evaluate_overconfidence(random_grayscale_image, random_direction, model):
+    
+    display_image_or_direction(random_grayscale_image)
+    output = forward_np_img(random_grayscale_image, model)
+
+    print("raw output: ", output)
+    print("interpretable output: ", torch.exp(output) * 100)
+    scaling_factor = 10000
+    display_image_or_direction(random_direction)
+    random_scaled_direction = scaling_factor * random_direction
+    modified_image = random_scaled_direction * random_grayscale_image
+    scaled_output = forward_np_img(modified_image, model)
+
+    print("raw output: ", scaled_output)
+    print("interpretable output: ", torch.exp(scaled_output) * 100)
+    # with this input, the neural network has a nearly 100% confidence in its output.
+    # Notice how the predicted number (where it predicts it at 100%) changed each time the code is rerun due to the random direction
+# %%
+random_grayscale_image = np.random.rand(28,28)
 random_direction = np.random.rand(28,28)
-display_image_or_direction(random_direction)
-random_scaled_direction = scaling_factor * np.random.rand(28,28)
-modified_image = random_scaled_direction * random_grayscale_image
-scaled_output = forward_np_img(modified_image, opt_model)
-
-print("raw output: ", scaled_output)
-print("interpretable output: ", torch.exp(scaled_output) * 100)
-# with this input, the neural network has a nearly 100% confidence in its output.
-# Notice how the predicted number (where it predicts it at 100%) changed each time the code is rerun due to the random direction
-# %%
+evaluate_overconfidence(random_grayscale_image,random_direction, non_bayesian_reLU_model)
